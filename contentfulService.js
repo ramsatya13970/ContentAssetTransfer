@@ -272,6 +272,17 @@ async function transferImageToAppEntry({
 
     const assetId = imageAssetLink.sys.id;
     const asset = await env.getAsset(assetId);
+    console.log("Asset fetched:", asset.fields.file);
+
+    // ❗ Enhanced Draft Check
+    const isDraft = !asset.sys.publishedVersion || asset.sys.publishedCounter === 0;
+    if (isDraft) {
+      const draftMsg = `Asset ID '${assetId}' in field '${imageFieldId}' of entry '${mainEntryId}' is in draft state (not published). Skipping...`;
+      console.warn(`[⚠️ DRAFT SKIPPED] ${draftMsg}`);
+      fs.appendFileSync(logFile, `${new Date().toISOString()} - ${draftMsg}\n`);
+      return; // Skip further processing if asset is draft
+    }
+
     const file = asset.fields.file?.[locale];
     const title = asset.fields.title?.[locale] || 'Untitled Asset';
     const thumbnail = file?.url ? `https:${file.url}` : '';
@@ -288,11 +299,18 @@ async function transferImageToAppEntry({
     console.log(`[📸 CMS Asset Ready] ${JSON.stringify(cmsAssetJSON, null, 2)}`);
 
     // Step 3: Check if media wrapper already exists with same name
+
     const existingEntries = await env.getEntries({
       content_type: mediaContentTypeId,
       'fields.name': title,
       limit: 1,
     });
+    // const existingEntries = await env.getEntries({ //check if media wrapper already exists with same asset ID
+    //   content_type: mediaContentTypeId,
+    //   // [`fields.${bynderAssetFieldId}.en.id`]: assetId,
+    //   'fields.mediaId': assetId, // Use mediaId to check for existing entries
+    //   limit: 1,
+    // });
 
     let mediaEntry;
     if (existingEntries.items.length > 0) {
@@ -305,6 +323,7 @@ async function transferImageToAppEntry({
           name: {
             [locale]: title,
           },
+          // mediaId:cmsAssetJSON.id, // Add mediaId field to fetch it without fetching all the media wrapperentries
           [bynderAssetFieldId]: {
             [locale]: cmsAssetJSON,
           },
@@ -340,6 +359,7 @@ async function transferImageToAppEntry({
     fs.appendFileSync(logFile, `${new Date().toISOString()} - ${msg}\n`);
   }
 }
+
 
 
 
