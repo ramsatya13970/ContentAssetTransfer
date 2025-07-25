@@ -243,7 +243,7 @@ const client = contentful.createClient({
 //   }
 // }
 
-
+const allMediaWrapperEntries=[];
 async function transferImageToAppEntry({    //final one
   mainEntryId,
   imageFieldId = 'coverImage',
@@ -315,11 +315,20 @@ async function transferImageToAppEntry({    //final one
 
     // Step 3: Check if media wrapper already exists with same name
 
-    const existingEntries = await env.getEntries({
+    const existingMediaWrapperEntries = await env.getEntries({
       content_type: mediaContentTypeId,
-      'fields.name': title,
-      limit: 1,
+      // 'fields.name': title,
+      // limit: 1,
     });
+    allMediaWrapperEntries.length = 0;
+    allMediaWrapperEntries.push(...existingMediaWrapperEntries.items);
+    console.log(`📦 Fetched ${existingMediaWrapperEntries.items.length} existing media wrapper entries.`);
+    // const existingEntries=allMediaWrapperEntries.filter(entry => entry.fields[bynderAssetFieldId]?.[locale]?.id === assetId);
+    // console.log("Existing entries with same asset ID:", existingEntries.length);
+    const existingEntry = allMediaWrapperEntries.find(
+      entry => entry.fields?.[bynderAssetFieldId]?.[locale]?.id === assetId
+    );
+    console.log("existingEntry:", existingEntry);
     // console.log("existingEntries:>>>>>>>>>>>>>>>>>>>",  existingEntries.items[0]);
     // const existingEntries = await env.getEntries({ //check if media wrapper already exists with same asset ID
     //   content_type: mediaContentTypeId,
@@ -329,10 +338,10 @@ async function transferImageToAppEntry({    //final one
     // });
 
     let mediaEntry;
-    if (existingEntries.items.length > 0) {
-      mediaEntry = existingEntries.items[0];
+    if (existingEntry) {
+      mediaEntry = existingEntry;
       console.log(`[♻️ REUSED] Existing media wrapper entry ID: ${mediaEntry.sys.id}`);
-    } else {
+    }  else {
       // Create new media wrapper entry
       mediaEntry = await env.createEntry(mediaContentTypeId, {
         fields: {
@@ -345,6 +354,7 @@ async function transferImageToAppEntry({    //final one
           },
         },
       });
+      allMediaWrapperEntries.push(mediaEntry);
 
       console.log(`[🆕 CREATED] Media wrapper entry ID: ${mediaEntry.sys.id}`);
 
@@ -490,15 +500,19 @@ const transferAssetToAppEntry = async ({
 
     console.log(`[📸 CMS Asset Ready] ${JSON.stringify(cmsAssetJSON, null, 2)}`);
 
-    const existingEntries = await env.getEntries({
-      content_type: mediaContentTypeId,
-      'fields.name': title,
-      limit: 1,
-    });
+    // const existingEntries = await env.getEntries({
+    //   content_type: mediaContentTypeId,
+    //   'fields.name': title,
+    //   limit: 1,
+    // });
+    
+    const existingEntry = allMediaWrapperEntries.find(
+      entry => entry.fields?.[bynderAssetFieldId]?.[locale]?.id === assetId
+    );
 
     let mediaEntry;
-    if (existingEntries.items.length > 0) {
-      mediaEntry = existingEntries.items[0];
+    if (existingEntry) {
+      mediaEntry = existingEntry;
       console.log(`[♻️ REUSED] Existing media wrapper entry ID: ${mediaEntry.sys.id}`);
     } else {
       mediaEntry = await env.createEntry(mediaContentTypeId, {
@@ -507,6 +521,7 @@ const transferAssetToAppEntry = async ({
           [bynderAssetFieldId]: { [locale]: cmsAssetJSON },
         },
       });
+      allMediaWrapperEntries.push(mediaEntry);
       await mediaEntry.publish();
       console.log(`[🚀 PUBLISHED] New media wrapper entry.`);
     }
@@ -579,20 +594,29 @@ const migrateAllEntries = async ({
     console.log(`📦 Total entries to process: ${filteredEntries.length}`);
     // console.log("First 2 entries of filteredEntries:", JSON.stringify(filteredEntries.slice(0, 2), null, 2));
 
-     return; // Uncomment this line to skip processing for debugging
+     const existingMediaWrapperEntries = await environment.getEntries({
+      content_type: mediaContentTypeId,
+      // 'fields.name': title,
+      // limit: 1,
+    });
+    allMediaWrapperEntries.length = 0;
+    allMediaWrapperEntries.push(...existingMediaWrapperEntries.items);
+    console.log(`📦 Fetched ${existingMediaWrapperEntries.items.length} existing media wrapper entries.`);
 
-    // for (const entry of filteredEntries) {
-    //   console.log(`🔄 Processing entry: ${entry.sys.id}`);
-    //   await transferAssetToAppEntry({
-    //     mainEntry: entry,
-    //     env: environment,
-    //     imageFieldId,
-    //     mediaFieldId,
-    //     bynderAssetFieldId,
-    //     mediaContentTypeId,
-    //     locale,
-    //   });
-    // }
+    //  return; // Uncomment this line to skip processing for debugging
+
+    for (const entry of filteredEntries) {
+      console.log(`🔄 Processing entry>>>>>>>>>>: ${entry.sys.id}`);
+      await transferAssetToAppEntry({
+        mainEntry: entry,
+        env: environment,
+        imageFieldId,
+        mediaFieldId,
+        bynderAssetFieldId,
+        mediaContentTypeId,
+        locale,
+      });
+    }
 
     console.log(`[🎉 DONE] Migrated ${filteredEntries.length} entries.`);
   } catch (err) {
