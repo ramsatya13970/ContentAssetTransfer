@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const { getContentfulEntry,transferImageToAppEntry } = require('./contentfulService');
+const { getContentfulEntry,transferImageToAppEntry ,migrateAllEntries} = require('./contentfulService');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -42,6 +42,46 @@ app.post('/transfer-image', async (req, res) => {
     res.status(500).json({ error });
   }
 });
+
+app.post('/transfer-image-forAll', async (req, res) => {
+  const {
+    spaceId,
+    environmentId,
+    contentTypeList,
+    MP_TAG_PREFIX,
+    imageFieldId = 'coverImage',
+    mediaFieldId = 'mediaField',
+    bynderAssetFieldId = 'jsonBynderAsset',
+    mediaContentTypeId = 'mediaWrapper',
+    locale = 'en',
+  } = req.body;
+
+  try {
+    if(environmentId !== 'TEST') {
+      console.error(`❌ Invalid environmentId: ${environmentId}. Expected 'TEST'.`);
+      return res.status(400).json({ error: 'Invalid environmentId. For now it works only for "TEST".' });
+    }
+
+    await migrateAllEntries({
+      spaceId,
+      environmentId,
+      contentTypeList,
+      MP_TAG_PREFIX,
+      imageFieldId,
+      mediaFieldId,
+      bynderAssetFieldId,
+      mediaContentTypeId,
+      locale,
+    });
+
+    res.json({ message: 'Bulk image transfer completed.' });
+    console.log(`✅ Bulk image transfer completed for content types: ${contentTypeList.join(', ')}`);
+  } catch (error) {
+    console.error(`❌ Bulk image transfer failed:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 app.listen(port, () => {
   console.log(`✅ Server running at http://localhost:${port}`);
