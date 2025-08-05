@@ -572,8 +572,16 @@ const migrateAllEntries = async ({
     }
     console.log(`📦 Fetched ${allEntries.length} entries across content types: ${contentTypeList.join(', ')}`);
 
-    let filteredEntries = allEntries.filter(entry => !entry.sys.archivedAt);
-    console.log(`🔎 Filtered out archived entries: ${filteredEntries.length} remaining`);
+    // let filteredEntries = allEntries.filter(entry => !entry.sys.archivedAt);
+    // entries.filter(e => e.sys.publishedAt && !e.sys.archivedAt)
+    let filteredEntries = allEntries.filter(entry => {
+      const isPublished = entry.sys.publishedAt;
+      const isArchived = entry.sys.archivedAt;
+      return isPublished && !isArchived;
+    });
+    
+    console.log(`🔎 From management token, Filtered out archived entries: ${filteredEntries.length} remaining`);
+    // return;
     // console.log("structure of filteredEntries:", JSON.stringify(filteredEntries[1], null, 2));
     if (MP_TAG_PREFIX) {
       filteredEntries = filteredEntries.filter(entry =>
