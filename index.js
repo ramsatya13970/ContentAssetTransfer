@@ -10,16 +10,23 @@ app.use(express.json());
 
 app.get('/entry/:id', async (req, res) => {
   const entryId = req.params.id;
+  const { spaceId, environmentId } = req.query;
+  console.log(`🔗 Fetching entry with ID: ${entryId} for space: ${spaceId}, environment: ${environmentId}`);
+
+  if (!spaceId || !environmentId) {
+    return res.status(400).json({ error: 'spaceId and environmentId are required query parameters.' });
+  }
 
   try {
-    const entry = await getContentfulEntry(entryId);
+    const entry = await getContentfulEntry(entryId, spaceId, environmentId);
     res.json(entry);
     console.log(`✅ Fetched entry: ${entryId}`);
   } catch (error) {
-    console.log(`❌ Error fetching entry: ${entryId}`, error);
-    res.status(500).json({ error });
+    console.error(`❌ Error fetching entry: ${entryId}`, error);
+    res.status(500).json({ error: error.message || error });
   }
 });
+
 
 app.post('/transfer-image', async (req, res) => {
  
