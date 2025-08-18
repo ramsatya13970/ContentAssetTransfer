@@ -1,165 +1,14 @@
 require('dotenv').config();
 const axios = require('axios');
 
-const SPACE_ID = process.env.CONTENTFUL_SPACE_ID;
-const ENVIRONMENT = process.env.CONTENTFUL_ENVIRONMENT;
 const ACCESS_TOKEN = process.env.CONTENTFUL_ACCESS_TOKEN;
-
 
 const contentful = require('contentful-management');
 const fs = require('fs');
-// const spaceId = process.env.CONTENTFUL_SPACE_ID;
-// const environmentId = process.env.CONTENTFUL_ENVIRONMENT;
-// const ACCESS_TOKEN = process.env.CONTENTFUL_ACCESS_TOKEN;
 
 const client = contentful.createClient({
   accessToken: ACCESS_TOKEN,
 });
-
-
-const allMediaWrapperEntries=[];
-async function transferImageToAppEntry({    //final one
-  mainEntryId,
-  imageFieldId = 'coverImage',
-  mediaFieldId = 'mediaField',
-  bynderAssetFieldId = 'jsonBynderAsset',
-  mediaContentTypeId = 'mediaWrapper',
-  locale = 'en',
-}) {
-  const logFile = 'contentful-error.log';
-
-  try {
-    const space = await client.getSpace(spaceId);
-    console.log(`[🔗 CONNECTED] Space ID: ${space.sys.id}`);
-    const env = await space.getEnvironment(environmentId);
-    console.log(`[🔗 CONNECTED] Environment ID: ${env.sys.id}`);
-
-    // Step 1: Get the main entry
-    const mainEntry = await env.getEntry(mainEntryId);
-    console.log(`[📥 FETCHED] Main Entry ID: ${mainEntry.sys.id}`);
-
-    // Step 2: Get image asset from coverImage
-    const imageAssetLink = mainEntry.fields?.[imageFieldId]?.[locale];
-    if (!imageAssetLink?.sys?.id) {
-      throw new Error(`No asset found in field '${imageFieldId}' of entry "${mainEntryId}"`);
-    }
-
-    const assetId = imageAssetLink.sys.id;
-    const asset = await env.getAsset(assetId);
-    console.log("Asset fetched:", asset.fields.file);
-
-    // ❗ Enhanced Draft Check
-    const isDraft = !asset.sys.publishedVersion || asset.sys.publishedCounter === 0;
-    if (isDraft) {
-      const draftMsg = `Asset ID '${assetId}' in field '${imageFieldId}' of entry '${mainEntryId}' is in draft state (not published). Skipping...`;
-      console.warn(`[⚠️ DRAFT ASSET SKIPPED] ${draftMsg}`);
-      fs.appendFileSync(logFile, `${new Date().toISOString()} - ${draftMsg}\n`);
-      return; // Skip further processing if asset is draft
-    }
-
-    const file = asset.fields.file?.[locale];
-    // if (!file) {
-    //   const noFileMsg = `Asset ID '${assetId}' in field '${imageFieldId}' of entry '${mainEntryId}' has no file. Skipping...`;
-    //   console.warn(`[❌ NO FILE] ${noFileMsg}`);
-    //   fs.appendFileSync(logFile, `${new Date().toISOString()} - ${noFileMsg}\n`);
-    //   return;
-    // }
-
-    if (!file.contentType.startsWith('image/')) {  //limiting to images only
-      const nonImageMsg = `Asset ID '${assetId}' in field '${imageFieldId}' of entry '${mainEntryId}' is not an image (its a: '${file.contentType}'). Skipping...`;
-      console.warn(`[🚫 NON-IMAGE ASSET] ${nonImageMsg}`);
-      fs.appendFileSync(logFile, `${new Date().toISOString()} - ${nonImageMsg}\n`);
-      return;
-    }
-    console.log("✅ File fetched (image):", file);
-
-    const title = asset.fields.title?.[locale] || 'Untitled Asset';
-    const thumbnail = file?.url ? `https:${file.url}` : '';
-    const originalUrl = thumbnail;
-
-    const cmsAssetJSON = {
-      type: 'cms',
-      id: assetId,
-      title,
-      thumbnail,
-      originalUrl,
-    };
-
-    console.log(`[📸 CMS Asset Ready] ${JSON.stringify(cmsAssetJSON, null, 2)}`);
-
-    // Step 3: Check if media wrapper already exists with same name
-
-    const existingMediaWrapperEntries = await env.getEntries({
-      content_type: mediaContentTypeId,
-      // 'fields.name': title,
-      // limit: 1,
-    });
-    allMediaWrapperEntries.length = 0;
-    allMediaWrapperEntries.push(...existingMediaWrapperEntries.items);
-    console.log(`📦 Fetched ${existingMediaWrapperEntries.items.length} existing media wrapper entries.`);
-    // const existingEntries=allMediaWrapperEntries.filter(entry => entry.fields[bynderAssetFieldId]?.[locale]?.id === assetId);
-    // console.log("Existing entries with same asset ID:", existingEntries.length);
-    const existingEntry = allMediaWrapperEntries.find(
-      entry => entry.fields?.[bynderAssetFieldId]?.[locale]?.id === assetId
-    );
-    console.log("existingEntry:", existingEntry);
-    // console.log("existingEntries:>>>>>>>>>>>>>>>>>>>",  existingEntries.items[0]);
-    // const existingEntries = await env.getEntries({ //check if media wrapper already exists with same asset ID
-    //   content_type: mediaContentTypeId,
-    //   [`fields.${bynderAssetFieldId}.en.id`]: assetId,
-    //   // 'fields.mediaId': assetId, // Use mediaId to check for existing entries
-    //   limit: 1,
-    // });
-
-    let mediaEntry;
-    if (existingEntry) {
-      mediaEntry = existingEntry;
-      console.log(`[♻️ REUSED] Existing media wrapper entry ID: ${mediaEntry.sys.id}`);
-    }  else {
-      // Create new media wrapper entry
-      mediaEntry = await env.createEntry(mediaContentTypeId, {
-        fields: {
-          name: {
-            [locale]: title,
-          },
-          // mediaId:cmsAssetJSON.id, // Add mediaId field to fetch it without fetching all the media wrapperentries
-          [bynderAssetFieldId]: {
-            [locale]: cmsAssetJSON,
-          },
-        },
-      });
-      allMediaWrapperEntries.push(mediaEntry);
-
-      console.log(`[🆕 CREATED] Media wrapper entry ID: ${mediaEntry.sys.id}`);
-
-      // Publish new media entry
-      await mediaEntry.publish();
-      console.log(`[🚀 PUBLISHED] New media wrapper entry.`);
-    }
-
-    // Step 4: Link media wrapper in the main entry
-    mainEntry.fields[mediaFieldId] = {
-      [locale]: {
-        sys: {
-          type: 'Link',
-          linkType: 'Entry',
-          id: mediaEntry.sys.id,
-        },
-      },
-    };
-
-    const updatedMain = await mainEntry.update();
-    await updatedMain.publish();
-
-    console.log(`[✅ UPDATED + PUBLISHED] Main entry now links media wrapper.`);
-
-  } catch (err) {
-    const msg = `[❌ ERROR] ${err.message}`;
-    console.error(msg);
-    fs.appendFileSync(logFile, `${new Date().toISOString()} - ${msg}\n`);
-  }
-}
-
 
 
 
@@ -182,7 +31,7 @@ async function getContentfulEntry(entryId,spaceId,environmentId) {
 }
 
 
-
+//This function fetches all the entries for a given content type
 const fetchAllEntries = async (environment, contentTypeId) => {
   const all = [];
   let skip = 0;
@@ -204,13 +53,14 @@ const fetchAllEntries = async (environment, contentTypeId) => {
 };
 
 // Wrapper to handle CMS calls with custom error
- const safeCall = async (fn, errorMsg) => {
-      try {
-        return await fn();
-      } catch {
-        throw new Error(errorMsg);
-      }
-    };
+const safeCall = async (fn, errorMsg) => {
+  try {
+    return await fn();
+  } catch {
+    throw new Error(errorMsg);
+  }
+};
+
 
 const transferAssetToAppEntry = async ({
   mainEntry,
@@ -333,7 +183,7 @@ const transferAssetToAppEntry = async ({
 
 };
 
-
+const allMediaWrapperEntries=[];
 const migrateAllEntries = async ({
   spaceId,
   environmentId,
@@ -452,5 +302,5 @@ const migrateAllEntries = async ({
 };
 
 
-module.exports = { getContentfulEntry,transferImageToAppEntry,migrateAllEntries };
+module.exports = { getContentfulEntry,migrateAllEntries };
 

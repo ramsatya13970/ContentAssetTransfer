@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const { getContentfulEntry,transferImageToAppEntry ,migrateAllEntries} = require('./contentfulService');
+const { getContentfulEntry ,migrateAllEntries} = require('./contentfulService');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -27,26 +27,6 @@ app.get('/entry/:id', async (req, res) => {
   }
 });
 
-
-app.post('/transfer-image', async (req, res) => {
- 
-  const { mainEntryId, imageFieldId, bynderRefFieldId, bynderAssetFieldId, locale } = req.body;
-
-  try {
-    await transferImageToAppEntry({
-      mainEntryId,
-      imageFieldId,
-      bynderRefFieldId,
-      bynderAssetFieldId,
-      locale
-    });
-    res.json({ message: 'Image transfer initiated successfully.' });
-    console.log(`✅ Image transfer initiated for entry: ${mainEntryId}`);
-  } catch (error) {
-    console.log(`❌ Error during image transfer for entry: ${mainEntryId}`, error);
-    res.status(500).json({ error });
-  }
-});
 
 app.post('/transfer-image-forAll', async (req, res) => {
   const {
